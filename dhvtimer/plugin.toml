@@ -1,6 +1,6 @@
 id = "unquenchedservant/dhvtimer"
 name = "DHV Timer"
-version = "2.0.1"
+version = "2.0.2"
 min_noctalia = "5.0.0"
 author = "chillhumanoid"
 icon = "timer"
