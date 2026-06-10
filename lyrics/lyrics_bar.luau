@@ -142,9 +142,10 @@ local function fetchLyrics(title, artist, album, length)
         :format(enc(title), enc(artist), enc(album), math.floor(length))
 
     noctalia.runAsync("curl -sf --max-time 10 " .. shellQuote(url), function(out)
-        -- Discard if a newer song started; otherwise always clear isLoading
-        isLoading = false
+        -- Discard if a newer song started; that song's own in-flight fetch
+        -- owns isLoading/lyrics from here on, so don't touch them.
         if forTitle ~= fetchedFor.title or forArtist ~= fetchedFor.artist then return end
+        isLoading = false
         local body = asString(out)
         if body == "" then return end
         -- Bail on missing/null/empty syncedLyrics field
