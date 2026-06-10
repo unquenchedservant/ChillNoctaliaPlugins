@@ -9,7 +9,7 @@ tags = ["timer", "productivity"]
 [[plugin]]
 id = "unquenchedservant/lyrics"
 name = "Lyrics"
-version = "1.0.3"
+version = "1.0.4"
 min_noctalia = "5.0.0"
 author = "chillhumanoid"
 tags = ["media", "lyrics"]
