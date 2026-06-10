@@ -230,17 +230,19 @@ end
 
 -- ── playerctl (MPRIS) backend ────────────────────────────────────────────────
 
-local function updateFromPlayerctl()
+-- Query playerctl and report its result via callback(result), where result is
+-- nil (no player/metadata) or {hasTrack, isPlaying, status, player, artist,
+-- title, album, length, pos}. Does not touch display state directly.
+local function queryPlayerctl(callback)
     -- One playerctl call gives us status, player, metadata, AND current position.
     -- mpris:length and position are both in microseconds (MPRIS spec).
     noctalia.runAsync(
         "playerctl metadata --format '{{ status }}:::{{ playerName }}:::{{ xesam:artist }}:::{{ xesam:title }}:::{{ xesam:album }}:::{{ mpris:length }}:::{{ position }}'",
         function(out)
-            busy = false
             local text = asString(out)
 
             if trim(text) == "" then
-                showEmpty()
+                callback(nil)
                 return
             end
 
@@ -253,7 +255,19 @@ local function updateFromPlayerctl()
             local length = (tonumber(p[6]) or 0) / 1e6   -- μs → seconds
             local pos    = (tonumber(p[7]) or 0) / 1e6   -- μs → seconds
 
-            processTrack(status, player, artist, title, album, length, pos)
+            callback({
+                -- "Stopped" players sometimes still report stale metadata; treat
+                -- that as no track, matching the previous hide-the-bar behavior.
+                hasTrack  = title ~= "" and (status == "Playing" or status == "Paused"),
+                isPlaying = status == "Playing",
+                status    = status,
+                player    = player,
+                artist    = artist,
+                title     = title,
+                album     = album,
+                length    = length,
+                pos       = pos,
+            })
         end
     )
 end
@@ -267,26 +281,67 @@ local function ciderCurl(path)
     return ("curl -sf --max-time 2%s %s"):format(hdr, shellQuote(CIDER_BASE .. path))
 end
 
-local function updateFromCider(nowPlayingBody)
-    local title  = jsonStr(nowPlayingBody, "name")
-    local artist = jsonStr(nowPlayingBody, "artistName")
-    local album  = jsonStr(nowPlayingBody, "albumName")
-    local length = jsonNum(nowPlayingBody, "durationInMillis") / 1000
-    local pos    = jsonNum(nowPlayingBody, "currentPlaybackTime")
-
-    noctalia.runAsync(ciderCurl("/is-playing"), function(out)
-        busy = false
-        local body   = asString(out)
-        local status
-        if jsonBool(body, "is_playing") then
-            status = "Playing"
-        elseif title ~= "" then
-            status = "Paused"
-        else
-            status = "Stopped"
+-- Query Cider's local API and report its result via callback(result), where
+-- result is nil (nothing loaded) or {hasTrack, isPlaying, player, artist,
+-- title, album, length, pos}. Does not touch display state directly.
+local function queryCider(callback)
+    noctalia.runAsync(ciderCurl("/now-playing"), function(out)
+        local body = asString(out)
+        if body == "" or not body:find('"status":"ok"') or jsonStr(body, "name") == "" then
+            callback(nil)
+            return
         end
-        processTrack(status, "cider", artist, title, album, length, pos)
+
+        local title  = jsonStr(body, "name")
+        local artist = jsonStr(body, "artistName")
+        local album  = jsonStr(body, "albumName")
+        local length = jsonNum(body, "durationInMillis") / 1000
+        local pos    = jsonNum(body, "currentPlaybackTime")
+
+        noctalia.runAsync(ciderCurl("/is-playing"), function(out2)
+            callback({
+                hasTrack  = true,
+                isPlaying = jsonBool(asString(out2), "is_playing"),
+                player    = "cider",
+                artist    = artist,
+                title     = title,
+                album     = album,
+                length    = length,
+                pos       = pos,
+            })
+        end)
     end)
+end
+
+-- ── Source selection ─────────────────────────────────────────────────────────
+
+-- Pick the active source given this cycle's Cider/playerctl results (either may
+-- be nil). Prefers whichever backend is actively Playing; if neither is, sticks
+-- with the previously-active source (cur.player) while it still has a track
+-- loaded, then falls back to Cider, then playerctl, then nothing.
+local function pickActive(cider, pctl)
+    if cider and cider.isPlaying then return "cider" end
+    if pctl and pctl.isPlaying then return pctl.player end
+
+    if cider and cider.hasTrack and cur.player == "cider" then return "cider" end
+    if pctl and pctl.hasTrack and cur.player == pctl.player then return pctl.player end
+
+    if cider and cider.hasTrack then return "cider" end
+    if pctl and pctl.hasTrack then return pctl.player end
+
+    return nil
+end
+
+-- Render the chosen source's track, or clear the bar if nothing is active.
+local function applyChoice(choice, cider, pctl)
+    if choice == nil then
+        showEmpty()
+        return
+    end
+
+    local r      = (choice == "cider") and cider or pctl
+    local status = r.isPlaying and "Playing" or "Paused"
+    processTrack(status, choice, r.artist, r.title, r.album, r.length, r.pos)
 end
 
 -- ── Update loop ───────────────────────────────────────────────────────────────
@@ -300,14 +355,19 @@ function update()
         return
     end
 
-    -- Try Cider's local API first; if it has a track loaded, prefer it.
-    -- Otherwise fall back to playerctl/MPRIS for other players.
-    noctalia.runAsync(ciderCurl("/now-playing"), function(out)
-        local body = asString(out)
-        if body ~= "" and body:find('"status":"ok"') and jsonStr(body, "name") ~= "" then
-            updateFromCider(body)
-        else
-            updateFromPlayerctl()
+    -- Cider is queried first; if it's actively playing it wins outright and
+    -- playerctl isn't queried. Otherwise also check playerctl/MPRIS so an
+    -- actively-playing MPRIS player can take over from an idle/paused Cider.
+    queryCider(function(cider)
+        if cider and cider.isPlaying then
+            busy = false
+            applyChoice("cider", cider, nil)
+            return
         end
+
+        queryPlayerctl(function(pctl)
+            busy = false
+            applyChoice(pickActive(cider, pctl), cider, pctl)
+        end)
     end)
 end

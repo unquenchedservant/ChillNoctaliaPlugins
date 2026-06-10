@@ -24,9 +24,14 @@ Clone or copy this repo into `$XDG_DATA_HOME/noctalia/plugins/lyrics`
 ## Cider support
 
 [Cider](https://cider.sh) doesn't expose an MPRIS interface, so the widget
-talks to Cider's local API at `http://127.0.0.1:10767` instead. If Cider is
-running with a track loaded, it takes priority; otherwise the widget falls
-back to playerctl/MPRIS.
+talks to Cider's local API at `http://127.0.0.1:10767` instead.
+
+The widget picks whichever source is **actively playing**: if Cider is
+playing, it's used; if Cider is idle/paused but another player (via
+playerctl/MPRIS) is playing, that player is used instead. If neither is
+playing, the widget keeps showing whichever source was active most recently
+(as long as it still has a track loaded), falling back to Cider, then
+playerctl, then an empty bar.
 
 If Cider's "API tokens required" connectivity setting is enabled, add a
 token to its `apiTokens` list and put the same value in
@@ -40,8 +45,9 @@ If token validation is disabled, this file isn't needed.
 
 ## How it works
 
-Every 500ms the widget checks Cider's local API first; if nothing is
-loaded there, it polls `playerctl` for the active player's status,
-metadata, and playback position. When a new track starts playing, it
-queries lrclib.net for synced (LRC) lyrics and displays the line matching
-the current playback position.
+Every 500ms the widget checks Cider's local API first. If Cider is actively
+playing, it's used directly. Otherwise the widget also polls `playerctl` for
+the active player's status, metadata, and playback position, and picks the
+active source as described in [Cider support](#cider-support). When the
+active source switches to a new track, it queries lrclib.net for synced
+(LRC) lyrics and displays the line matching the current playback position.
