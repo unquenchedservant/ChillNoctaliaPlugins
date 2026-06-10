@@ -46,11 +46,25 @@ local function shellQuote(s)
     return "'" .. s:gsub("'", "'\\''") .. "'"
 end
 
--- Extract a JSON string field (handles \" and \\ escapes; not safe for \n in values)
+-- Protect JSON-escaped backslashes and quotes with placeholder bytes so that
+-- (1) a "(.-)" extraction below doesn't stop early at a \" inside a value, and
+-- (2) any "\" left afterwards can only be part of a \n or \r escape.
+local function jsonProtect(s)
+    return (s:gsub("\\\\", "\1"):gsub('\\"', "\2"))
+end
+
+-- Decode a JSON string value (protected or not): unescape \n/\r, then restore
+-- the placeholder bytes to literal \ and ". Re-running jsonProtect here is a
+-- no-op if the value is already protected, since no raw \\ or \" remain.
+local function jsonUnescape(s)
+    return (jsonProtect(s):gsub("\\n", "\n"):gsub("\\r", ""):gsub("\1", "\\"):gsub("\2", '"'))
+end
+
+-- Extract a JSON string field, correctly handling \" and \\ inside the value
 local function jsonStr(body, key)
-    local v = body:match('"' .. key .. '":"(.-)"')
+    local v = jsonProtect(body):match('"' .. key .. '":"(.-)"')
     if not v then return "" end
-    return (v:gsub('\\"', '"'):gsub("\\\\", "\\"))
+    return jsonUnescape(v)
 end
 
 local function jsonNum(body, key)
@@ -135,11 +149,11 @@ local function fetchLyrics(title, artist, album, length)
         if body == "" then return end
         -- Bail on missing/null/empty syncedLyrics field
         if body:find('"syncedLyrics":null') or body:find('"syncedLyrics":""') then return end
-        -- Extract string value — safe for typical lyrics (no embedded quotes)
-        local raw = body:match('"syncedLyrics":"(.-)"')
+        -- Extract string value, correctly handling \" and \\ inside the value
+        local raw = jsonProtect(body):match('"syncedLyrics":"(.-)"')
         if not raw or raw == "" then return end
-        -- Unescape JSON string escapes (\n → newline, etc.)
-        raw = raw:gsub("\\n", "\n"):gsub("\\r", ""):gsub('\\"', '"'):gsub("\\\\", "\\")
+        -- Unescape JSON string escapes (\n → newline, \", \\, etc.)
+        raw = jsonUnescape(raw)
         lyrics = parseLrc(raw)
     end, 15000)
 end
