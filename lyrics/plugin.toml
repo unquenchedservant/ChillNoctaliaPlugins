@@ -1,6 +1,6 @@
 id = "unquenchedservant/lyrics"
 name = "Lyrics"
-version = "1.0.0"
+version = "1.0.1"
 min_noctalia = "5.0.0"
 author = "chillhumanoid"
 icon = "music"
