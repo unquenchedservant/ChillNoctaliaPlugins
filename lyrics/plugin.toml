@@ -1,0 +1,26 @@
+id = "unquenchedservant/lyrics"
+name = "Lyrics"
+version = "1.0.0"
+min_noctalia = "5.0.0"
+author = "chillhumanoid"
+icon = "music"
+tags = ["media", "lyrics"]
+description = "Displays synced lyrics from lrclib.net via playerctl"
+
+[[widget]]
+id = "lyrics"
+entry = "lyrics_bar.luau"
+
+  [[widget.setting]]
+  key = "hide_when_empty"
+  type = "bool"
+  label = "Hide when empty"
+  description = "Hide the widget when no synced lyrics are available."
+  default = true
+
+  [[widget.setting]]
+  key = "hide_when_paused"
+  type = "bool"
+  label = "Hide when paused"
+  description = "Hide the widget while playback is paused."
+  default = false
