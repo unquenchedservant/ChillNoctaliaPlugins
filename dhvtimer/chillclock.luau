@@ -14,7 +14,7 @@ local streamStarted    = false
 local eventsThisTick   = 0
 local graceTicks       = 0  -- skip the liveness check for this many ticks after (re)connect
 
-local lastPhase       = nil
+local lastPhase       = 0
 local lastActiveTimer = nil
 
 local function curl(path, method)
@@ -34,12 +34,7 @@ local function applyStatus(body)
     local active = tonumber(body:match('"activeTimer":(%d+)'))
 
     if phase and active then
-        if lastPhase == nil or active ~= lastActiveTimer then
-            -- First event since (re)connect, or active timer changed: establish
-            -- a new baseline without notifying.
-            lastPhase = phase
-            lastActiveTimer = active
-        elseif phase > lastPhase then
+        if phase > lastPhase then
             noctalia.notify("Phase " .. phase, (temp or "?") .. "°")
             lastPhase = phase
         elseif lastPhase == 4 and phase == 0 then
