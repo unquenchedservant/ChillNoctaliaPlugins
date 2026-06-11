@@ -14,6 +14,9 @@ local streamStarted    = false
 local eventsThisTick   = 0
 local graceTicks       = 0  -- skip the liveness check for this many ticks after (re)connect
 
+local lastPhase       = nil
+local lastActiveTimer = nil
+
 local function curl(path, method)
     local m = method and ("-X " .. method) or ""
     return ('curl -s %s -H "X-API-KEY: %s" "%s%s"'):format(m, apiKey, serverUrl, path)
@@ -25,6 +28,22 @@ local function applyStatus(body)
     local class = body:match('"class":"([^"]+)"')
     barWidget.setText(text or "0:00")
     barWidget.setColor(COLORS[class] or "#ffffff")
+
+    local phase  = tonumber(body:match('"phase":(%d+)'))
+    local temp   = body:match('"temp":(%d+)')
+    local active = tonumber(body:match('"activeTimer":(%d+)'))
+
+    if phase and active then
+        if lastPhase == nil or active ~= lastActiveTimer then
+            -- First event since (re)connect, or active timer changed: establish
+            -- a new baseline without notifying.
+            lastPhase = phase
+            lastActiveTimer = active
+        elseif phase > lastPhase then
+            noctalia.notify("Phase " .. phase, (temp or "?") .. "°")
+            lastPhase = phase
+        end
+    end
 end
 
 -- Open a long-lived SSE connection to /events; each line is either a

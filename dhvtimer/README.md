@@ -22,6 +22,12 @@ The bar text/color update from a single long-lived connection to ChillClock's
 connection goes silent (e.g. the ChillClock server restarts), the widget
 detects it within a few seconds and reconnects automatically.
 
+Whenever the active timer advances to a new phase (e.g. phase 1 → phase 2),
+the widget sends a desktop notification titled `"Phase <N>"` with the new
+phase's target temperature (e.g. `"375°"`) as the body. No notification is
+sent for the first event after a (re)connect, or when the active timer is
+switched — both just establish a new baseline.
+
 - **Left click** — toggle the timer selected by the "Default timer" plugin
   setting (1 or 2)
 - **Right click** — toggle the other timer
