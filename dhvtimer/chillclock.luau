@@ -42,6 +42,9 @@ local function applyStatus(body)
         elseif phase > lastPhase then
             noctalia.notify("Phase " .. phase, (temp or "?") .. "°")
             lastPhase = phase
+        elseif lastPhase == 4 and phase == 0 then
+            noctalia.notify("Session Ended", "Stay Toasty")
+            lastPhase = phase
         end
     end
 end
